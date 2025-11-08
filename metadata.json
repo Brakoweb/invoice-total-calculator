@@ -1,0 +1,5 @@
+{
+  "name": "Invoice Total Calculator",
+  "description": "A web application to calculate the final total of an invoice, including subtotal, discounts, taxes, deposits, and financing fees. The calculations are done in real-time.",
+  "requestFramePermissions": []
+}
