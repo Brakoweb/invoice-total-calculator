@@ -159,8 +159,26 @@ const App: React.FC = () => {
     sendDataToSheet();
   };
 
+  const handleInvoiceNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^0-9]/g, '');
+    if (value.length <= 6) {
+      setInvoiceNumber(value);
+    }
+  };
+
+  const handleInvoiceNumberBlur = () => {
+    if (invoiceNumber) {
+      setInvoiceNumber(invoiceNumber.padStart(6, '0'));
+    }
+  };
+
   const handlePrint = () => {
     if (!isPrintEnabled) return;
+
+    if (location === 'lales' && invoiceNumber.trim() === '') {
+      toast.warning("Ingresa el numero de invoice 'INV-' antes de imprimir, presionando el boton Calculate.");
+      return;
+    }
     setTimeout(() => {
       window.print();
     }, 100);
@@ -380,11 +398,12 @@ const App: React.FC = () => {
                     <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-600 bg-gray-800 text-gray-400 sm:text-sm">INV-</span>
                     <input
                       id="invoiceNumber"
-                      type="number"
+                      type="tel" // Use 'tel' to encourage numeric keyboard on mobile
                       value={invoiceNumber}
-                      onChange={(e) => setInvoiceNumber(e.target.value)}
-                      className="w-full px-3 py-2 rounded-r-md bg-gray-800 text-white border border-gray-600 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="12345"
+                      onChange={handleInvoiceNumberChange}
+                      onBlur={handleInvoiceNumberBlur}
+                      placeholder="000000"
+                      className="mt-1 block w-full bg-gray-800 border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                   </div>
                 </div>
