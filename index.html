@@ -12,6 +12,13 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
+
+      /* Hide Sonner toast notifications when printing */
+      @media print {
+        [data-sonner-toaster] {
+          display: none !important;
+        }
+      }
     </style>
   <script type="importmap">
 {
