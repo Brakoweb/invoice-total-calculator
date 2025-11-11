@@ -35,20 +35,6 @@ Follow these instructions to get a local copy up and running for development and
 ### Prerequisites
 
 - Node.js (v18 or later)
-- npm
-
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Brakoweb/invoice-total-calculator.git
-   cd invoice-total-calculator
-   ```
-
-2. **Install NPM packages:**
-   ```bash
-   npm install
-   ```
 
 3. **Set up environment variables:**
    - Create a `.env` file in the root of the project.

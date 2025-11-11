@@ -20,6 +20,13 @@ const App: React.FC = () => {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [isPrintEnabled, setIsPrintEnabled] = useState(false);
     const [displayTotal, setDisplayTotal] = useState(0);
+
+  // HighLevel API State
+  const [searchInvoiceNumber, setSearchInvoiceNumber] = useState('');
+  const [highLevelInvoiceData, setHighLevelInvoiceData] = useState<any>(null);
+  const [isLoadingInvoice, setIsLoadingInvoice] = useState(false);
+  const [invoiceSearchError, setInvoiceSearchError] = useState('');
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   
   // --- Google Sheets API Config ---
   // IMPORTANT: Replace with your actual credentials
@@ -47,6 +54,12 @@ const App: React.FC = () => {
     setClientName('');
     setInvoiceNumber('');
     setIsPrintEnabled(false);
+    // Reset HighLevel state
+    setSearchInvoiceNumber('');
+    setHighLevelInvoiceData(null);
+    setIsLoadingInvoice(false);
+    setInvoiceSearchError('');
+    setIsPreviewModalOpen(false);
   }, []);
 
   const numericSubtotal = useMemo(() => parseFloat(subtotal) || 0, [subtotal]);
@@ -157,6 +170,10 @@ const App: React.FC = () => {
     setDisplayTotal(finalTotal);
     setIsPrintEnabled(true);
     sendDataToSheet();
+    // Después de confirmar, busca la factura en HighLevel si el número existe
+    if (location !== 'royal' && invoiceNumber.trim() !== '') {
+      handleSearchInvoice();
+    }
   };
 
   const handleInvoiceNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +206,116 @@ const App: React.FC = () => {
       style: 'currency',
       currency: 'USD',
     }).format(value);
+  };
+
+  const handleSearchInvoice = async () => {
+    // Usamos el `invoiceNumber` del modal de detalles
+    const searchNumber = invoiceNumber.trim();
+    if (!searchNumber) {
+      toast.warning('Please enter the invoice number in the details modal first.');
+      return;
+    }
+    setIsLoadingInvoice(true);
+    setInvoiceSearchError('');
+    setHighLevelInvoiceData(null);
+
+    try {
+      // El backend ahora busca por `invoiceNumber`
+      const response = await fetch(`/api/highlevel?invoiceNumber=${searchNumber}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch invoice data.');
+      }
+
+      setHighLevelInvoiceData(data.invoice);
+      toast.success('HighLevel Invoice found!');
+    } catch (error: any) {
+      setInvoiceSearchError(error.message);
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setIsLoadingInvoice(false);
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!highLevelInvoiceData) return;
+
+    let requestBody: any;
+    let amountToPay: number;
+    const pendingSchedules = highLevelInvoiceData.paymentSchedule?.schedules?.filter(
+      (s: any) => s.status === 'pending'
+    ) || [];
+
+    if (pendingSchedules.length > 0) {
+      // Caso 1: La factura tiene un plan de pagos con cuotas pendientes
+      amountToPay = pendingSchedules.reduce((sum: number, s: any) => sum + s.value, 0);
+      const scheduleIds = pendingSchedules.map((s: any) => s._id);
+      requestBody = {
+        mode: 'other',
+        notes: 'Pago hecho en Frontdesk',
+        amount: amountToPay,
+        paymentScheduleIds: scheduleIds,
+        fulfilledAt: new Date().toISOString(),
+      };
+    } else {
+      // Caso 2: La factura no tiene plan de pagos o ya está todo pagado
+      amountToPay = highLevelInvoiceData.total - highLevelInvoiceData.amountPaid;
+      if (amountToPay <= 0) {
+        toast.info('This invoice has no pending balance.');
+        return;
+      }
+      requestBody = {
+        mode: 'other',
+        notes: 'Pago hecho en Frontdesk',
+        amount: amountToPay,
+        fulfilledAt: new Date().toISOString(),
+      };
+    }
+
+    try {
+      const response = await fetch(`/api/highlevel?invoiceId=${highLevelInvoiceData._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to mark as paid.');
+      }
+
+      // Actualizar el estado local de la factura para reflejar el pago
+      setHighLevelInvoiceData((prevData: any) => {
+        const newAmountPaid = prevData.amountPaid + amountToPay;
+        const isFullyPaid = newAmountPaid >= prevData.total;
+
+        let updatedSchedules = prevData.paymentSchedule?.schedules;
+        if (pendingSchedules.length > 0) {
+          const paidScheduleIds = pendingSchedules.map((s: any) => s._id);
+          updatedSchedules = prevData.paymentSchedule.schedules.map((s: any) => 
+            paidScheduleIds.includes(s._id) ? { ...s, status: 'paid' } : s
+          );
+        }
+
+        return {
+          ...prevData,
+          status: isFullyPaid ? 'paid' : 'partially_paid',
+          amountPaid: newAmountPaid,
+          paymentSchedule: updatedSchedules ? {
+            ...prevData.paymentSchedule,
+            schedules: updatedSchedules,
+          } : prevData.paymentSchedule,
+        };
+      });
+
+      toast.success('Pago registrado exitosamente!');
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    }
   };
 
   return (
@@ -225,6 +352,9 @@ const App: React.FC = () => {
                 Calculate your final invoice amount in real-time.
               </p>
             </div>
+
+
+
             
             <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 print:grid-cols-1">
               {/* Input Form */}
@@ -362,11 +492,26 @@ const App: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-2xl font-semibold text-gray-300 print:text-black">Final Total</span>
                     <span className="text-3xl sm:text-4xl font-extrabold text-teal-300 tracking-tight print:text-black">
-                                            <animated.span>
+                      <animated.span>
                         {animatedTotal.to((val) => formatCurrency(val))}
                       </animated.span>
                     </span>
                   </div>
+                </div>
+
+                {/* HighLevel Invoice Button Area */}
+                <div className="mt-6 print:hidden">
+                  {isLoadingInvoice && <p className="text-center text-purple-300">Searching for HighLevel invoice...</p>}
+                  {invoiceSearchError && <p className="text-center text-red-400">HighLevel Error: {invoiceSearchError}</p>}
+                  {location === 'lales' && invoiceNumber.trim() !== '' && highLevelInvoiceData && (
+                    <button
+                      onClick={() => setIsPreviewModalOpen(true)}
+                      className="w-full inline-flex justify-center items-center px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-emerald-500 transition-colors"
+                    >
+                      <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+                      Correr el Pago
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -374,6 +519,41 @@ const App: React.FC = () => {
         </div>
       </main>
       <Toaster richColors theme="dark" />
+
+      {/* HighLevel Invoice Preview Modal */}
+      {isPreviewModalOpen && highLevelInvoiceData && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4">
+          <div className="bg-gray-700 p-6 rounded-lg shadow-xl w-full max-w-md">
+            <h3 className="text-white text-xl font-bold mb-4">Invoice Preview</h3>
+            <div className="space-y-2 text-gray-300">
+              <p><strong>Invoice #:</strong> {highLevelInvoiceData.invoiceNumber}</p>
+              <p><strong>Client:</strong> {highLevelInvoiceData.contactDetails.name}</p>
+              <p><strong>Email:</strong> {highLevelInvoiceData.contactDetails.email}</p>
+              <p><strong>Total:</strong> {formatCurrency(highLevelInvoiceData.total)}</p>
+              <p><strong>Amount Paid:</strong> {formatCurrency(highLevelInvoiceData.amountPaid)}</p>
+              <p><strong>Status:</strong> <span className={`font-bold ${highLevelInvoiceData.status === 'paid' ? 'text-green-400' : 'text-yellow-400'}`}>{highLevelInvoiceData.status}</span></p>
+            </div>
+            <div className="mt-6 space-y-4">
+              {highLevelInvoiceData.status !== 'paid' && (
+                <button
+                  onClick={handleMarkAsPaid}
+                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500"
+                >
+                  Marcar como pagado
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsPreviewModalOpen(false)}
+                className="w-full px-4 py-2 border border-gray-600 text-base font-medium rounded-md shadow-sm text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-gray-500"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isDetailModalOpen && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4 print:hidden">
           <div className="bg-gray-700 p-6 rounded-lg shadow-xl w-full max-w-md">

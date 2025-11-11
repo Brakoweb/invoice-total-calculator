@@ -21,6 +21,12 @@ async function getBody(req) {
   });
 }
 
+const sendResponse = (res, statusCode, body) => {
+  res.statusCode = statusCode;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(body));
+};
+
 const HEADERS = [
   'Timestamp',
   'Location',
@@ -39,10 +45,7 @@ const HEADERS = [
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
-    response.statusCode = 405;
-    response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ message: 'Only POST requests are allowed' }));
-    return;
+    return sendResponse(response, 405, { message: 'Only POST requests are allowed' });
   }
 
   try {
@@ -113,14 +116,10 @@ export default async function handler(request, response) {
       requestBody: { values: [rowData] },
     });
 
-    response.statusCode = 200;
-    response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ message: 'Todo salio bien!' }));
+    return sendResponse(response, 200, { message: 'Todo salio bien!' });
 
   } catch (error) {
     console.error('Error... algo salio mal:', error);
-    response.statusCode = 500;
-    response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ message: 'Error processing request', error: error.message }));
+    return sendResponse(response, 500, { message: 'Error processing request', error: error.message });
   }
 }
