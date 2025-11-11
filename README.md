@@ -4,8 +4,6 @@
 
 An elegant and powerful web application designed to calculate final invoice totals in real-time. This tool is tailored for businesses that handle complex calculations involving subtotals, discounts, taxes, fees, and deposits. The application features a clean, modern interface and seamless integration with Google Sheets for data logging.
 
-**Live Application:** [calc.laleplasticsurgery.com](https://calc.laleplasticsurgery.com)
-
 ---
 
 ## ✨ Key Features
