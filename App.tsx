@@ -68,18 +68,17 @@ const App: React.FC = () => {
   const numericDeposit = useMemo(() => parseFloat(deposit) || 0, [deposit]);
 
   const baseAmount = useMemo(() => {
-    const result = numericSubtotal - numericDiscount - numericCash;
+    const result = numericSubtotal - numericDiscount - numericCash - numericDeposit;
     return result > 0 ? result : 0;
-  }, [numericSubtotal, numericDiscount, numericCash]);
+  }, [numericSubtotal, numericDiscount, numericCash, numericDeposit]);
 
   const taxes = useMemo(() => baseAmount * 0.07, [baseAmount]);
 
   const subtotalAfterTaxes = useMemo(() => baseAmount + taxes, [baseAmount, taxes]);
 
   const netSubtotal = useMemo(() => {
-    const result = subtotalAfterTaxes - numericDeposit;
-    return result > 0 ? result : 0;
-  }, [subtotalAfterTaxes, numericDeposit]);
+    return subtotalAfterTaxes;
+  }, [subtotalAfterTaxes]);
   
   const financingFee = useMemo(() => {
     return applyFinancingFee ? netSubtotal * 0.10 : 0;
